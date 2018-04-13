@@ -66,7 +66,20 @@ void initialize(string configFile, int portNumber, int TTL, int infinity, int pe
 	graph_node_map = (node*)calloc(config_lines.size()+1, sizeof(node));
 	//Initialize itself to 0
 	set_graphNode(graph_node_map[0], "A", true);
+	//Parse config file data and initialize graph
 	for(int i =0; i <config_lines.size(); i++){
+		string delim = " ";
+		int start = 0;
+    int end = config_lines[i].find(delim);
+		string name;
+		while (end != std::string::npos)
+		{
+			name = config_lines[i].substr(start, end - start);
+			start = end + delim.length();
+			end = config_lines[i].find(delim, start);
+		}
+		bool neigh = atoi(config_lines[i].substr(start, end).c_str())==1?true:false;
+		set_graphNode(graph_node_map[i], name, neigh);
 	}
 }
 
