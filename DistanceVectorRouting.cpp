@@ -5,12 +5,15 @@
 #include <cstring>
 #include <vector>
 #include <cstdlib>
+#include <unistd.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
 #define DEFAULT_PARAMS 7
+#define HOST_NAME_MAX 100
 
 using namespace std;
 //Grapg data structure - 2D array
@@ -35,10 +38,33 @@ typedef struct{
 
 Route_entry* RoutingTable;
 
-void error_handler(string message){
+void freeMemory();
+void error_handler(string message, bool callFreeMemory);
+string getLocalHostName();
+void printGraph();
+void printRoutingTable();
+void set_graphNode(node& graph_node, string host_name, bool isNeighbour);
+void read_config_file(string file_name, vector<string>& config_lines);
+void create_2D_array(int** array, int row, int col);
+void initializeGraph(vector<string>& config_lines, int infinity);
+void initializeRoutingTable(int TTL);
+void initialize(string configFile, int portNumber, int TTL, int infinity, int period, int poisonReverse);
+
+
+void error_handler(string message, bool callFreeMemory){
 	cerr<<message<<endl;
 	cerr<<"Shutting down"<<endl;
+	if(callFreeMemory) freeMemory();
 	exit(EXIT_FAILURE);
+}
+
+string getLocalHostName(){
+	char hostname[HOST_NAME_MAX];
+	if(gethostname(hostname, HOST_NAME_MAX) < 0){
+		perror("Error:");
+		error_handler("Failed to get hostname", false);
+	}
+	return string(hostname);
 }
 
 void printGraph(){
@@ -85,7 +111,7 @@ void read_config_file(string file_name, vector<string>& config_lines){
     myfile.close();
   }
   else {
-		error_handler("Invalid file");
+		error_handler("Invalid file", false);
 	}
 }
 
@@ -97,11 +123,11 @@ void create_2D_array(int** array, int row, int col){
 }
 
 void initializeGraph(vector<string>& config_lines, int infinity){
+	string hostname = getLocalHostName();
 	create_2D_array(graph, config_lines.size()+1, config_lines.size()+1);
 	graph_node_map = (node*)calloc(config_lines.size()+1, sizeof(node));
 	//Initialize itself to 0
-
-	set_graphNode(graph_node_map[0], "A", true);
+	set_graphNode(graph_node_map[0], hostname, true);
 	graph[0][0] = 0;
 	//Parse config file data and initialize graph
 
@@ -157,7 +183,7 @@ int main(int argc, char const* argv[]){
 		cout<<"The program takes 7 arguments."<<endl;
 		cout<<"Please run the program using format:"<<endl;
 		cout<<"DistanceVectorRouting <config> <portnumber> <TTL> <infinity> <Period> <Poison Reverse>"<<endl;
-		error_handler("Invalid number of arguments");
+		error_handler("Invalid number of arguments", false);
 	}
 
 	string configFile = string(argv[1]);
