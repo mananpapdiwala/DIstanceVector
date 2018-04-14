@@ -39,6 +39,7 @@ typedef struct{
 Route_entry* RoutingTable;
 
 void freeMemory();
+void freeSocket(int socket_id);
 void error_handler(string message, bool callFreeMemory);
 string getLocalHostName();
 void printGraph();
@@ -49,7 +50,7 @@ void create_2D_array(int** array, int row, int col);
 void initializeGraph(vector<string>& config_lines, int infinity);
 void initializeRoutingTable(int TTL);
 void initialize(string configFile, int portNumber, int TTL, int infinity, int period, int poisonReverse);
-
+int createSocket(int portNumber);
 
 void error_handler(string message, bool callFreeMemory){
 	cerr<<message<<endl;
@@ -166,6 +167,32 @@ void initialize(string configFile, int portNumber, int TTL, int infinity, int pe
 	initializeRoutingTable(TTL);
 }
 
+int createSocket(int portNumber){
+	int socket_id;
+	if((socket_id = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0){
+		error_handler("Socket creating failed.", true);
+	}
+
+	int opt = 1;
+	if(setsockopt(socket_id, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))){
+		error_handler("Error Assigning port.", true);
+	}
+
+	struct sockaddr_in address;
+	memset((char*)&address, 0, sizeof(address));
+
+	int addlen = sizeof(address);
+	address.sin_family = AF_INET;
+	address.sin_addr.s_addr = htonl(INADDR_ANY);
+	address.sin_port = htons(portNumber);
+
+	if(bind(socket_id, (struct sockaddr*)&address, sizeof(address)) < 0){
+		error_handler("Binding Failed.", true);
+	}
+
+	return socket_id;
+}
+
 void freeMemory(){
 	for(int i = 0; i < number_of_nodes; i++){
 		free(graph[i]);
@@ -176,6 +203,10 @@ void freeMemory(){
 	free(graph);
 	free(graph_node_map);
 	free(RoutingTable);
+}
+
+void freeSocket(int socket_id){
+	close(socket_id);
 }
 
 int main(int argc, char const* argv[]){
@@ -193,8 +224,10 @@ int main(int argc, char const* argv[]){
 	int period = atoi(argv[5]);
 	int poisonReverse = atoi(argv[6]);
 	initialize(configFile, portNumber, TTL, infinity, period, poisonReverse);
+	int socket_id = createSocket(portNumber);
 
 	freeMemory();
+	freeSocket(socket_id);
 
 	return 0;
 }
