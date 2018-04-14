@@ -13,7 +13,7 @@
 #include <arpa/inet.h>
 
 #define DEFAULT_PARAMS 7
-#define HOST_NAME_MAX 100
+#define HOST_NAME_MAX 50
 
 using namespace std;
 //Grapg data structure - 2D array
@@ -38,6 +38,11 @@ typedef struct{
 
 Route_entry* RoutingTable;
 
+typedef struct{
+	char destination[HOST_NAME_MAX];
+	int cost;
+} route_message;
+
 void freeMemory();
 void freeSocket(int socket_id);
 void error_handler(string message, bool callFreeMemory);
@@ -51,6 +56,8 @@ void initializeGraph(vector<string>& config_lines, int infinity);
 void initializeRoutingTable(int TTL);
 void initialize(string configFile, int portNumber, int TTL, int infinity, int period, int poisonReverse);
 int createSocket(int portNumber);
+void sendAdvertisement(int socket_id, int portNumber);
+int calculate_buffer_size();
 
 void error_handler(string message, bool callFreeMemory){
 	cerr<<message<<endl;
@@ -66,6 +73,10 @@ string getLocalHostName(){
 		error_handler("Failed to get hostname", false);
 	}
 	return string(hostname);
+}
+
+int calculate_buffer_size(){
+	return (number_of_nodes * sizeof(route_message));
 }
 
 void printGraph(){
@@ -193,6 +204,39 @@ int createSocket(int portNumber){
 	return socket_id;
 }
 
+void sendAdvertisement(int socket_id, int portNumber){
+	route_message message[number_of_nodes];
+	for(int i = 0; i < number_of_nodes; i++){
+		strncpy(message[i].destination, RoutingTable[i].destination, HOST_NAME_MAX);
+		message[i].cost = RoutingTable[i].cost;
+	}
+
+	int buffsize = calculate_buffer_size();
+	for(int i = 1; i < number_of_nodes; i++){
+		if(graph_node_map[i].isNeighbour){
+			struct sockaddr_in server_address;
+		  socklen_t addrlen = sizeof(server_address);
+
+		  memset((char*)&server_address, 0, sizeof(server_address));
+		  server_address.sin_family = AF_INET;
+		  server_address.sin_port = htons(portNumber);
+
+		  if(inet_pton(AF_INET, graph_node_map[i].host_name, &server_address.sin_addr) < 0){
+				freeSocket(socket_id);
+				error_handler("Invalid address. This address is not supported.", true);
+		  }
+
+			if(sendto(socket_id, message, buffsize, 0, (struct sockaddr*)&server_address, addrlen) <= 0){
+				perror("Error:");
+				freeSocket(socket_id);
+				error_handler("Sending Failed", true);
+			}
+		}
+	}
+
+
+}
+
 void freeMemory(){
 	for(int i = 0; i < number_of_nodes; i++){
 		free(graph[i]);
@@ -225,6 +269,7 @@ int main(int argc, char const* argv[]){
 	int poisonReverse = atoi(argv[6]);
 	initialize(configFile, portNumber, TTL, infinity, period, poisonReverse);
 	int socket_id = createSocket(portNumber);
+	sendAdvertisement(socket_id, portNumber);
 
 	freeMemory();
 	freeSocket(socket_id);
