@@ -20,7 +20,7 @@ int number_of_nodes;
 
 //IP - index map
 typedef struct{
-	char* ip_address;
+	char* host_name;
 	bool isNeighbour;
 } node;
 
@@ -52,7 +52,7 @@ void printGraph(){
 
 	cout<<"Printing Graph Node Map"<<endl;
 	for(int i = 0; i < number_of_nodes; i++){
-		cout<<i<<"\t"<<graph_node_map[i].ip_address<<"\t"<<graph_node_map[i].isNeighbour<<endl;
+		cout<<i<<"\t"<<graph_node_map[i].host_name<<"\t"<<graph_node_map[i].isNeighbour<<endl;
 	}
 	cout<<endl<<endl;
 }
@@ -67,8 +67,8 @@ void printRoutingTable(){
 	cout<<endl<<endl;
 }
 
-void set_graphNode(node& graph_node, string ip, bool isNeighbour){
-	graph_node.ip_address = strdup(ip.c_str());
+void set_graphNode(node& graph_node, string host_name, bool isNeighbour){
+	graph_node.host_name = strdup(host_name.c_str());
 	graph_node.isNeighbour = isNeighbour;
 }
 
@@ -123,8 +123,8 @@ void initializeGraph(vector<string>& config_lines, int infinity){
 void initializeRoutingTable(int TTL){
 	RoutingTable = (Route_entry*)calloc(number_of_nodes, sizeof(Route_entry));
 	for(int i = 0; i < number_of_nodes; i++){
-		RoutingTable[i].destination = strdup(graph_node_map[i].ip_address);
-		RoutingTable[i].nextHop = graph_node_map[i].isNeighbour ? strdup(graph_node_map[i].ip_address) : NULL;
+		RoutingTable[i].destination = strdup(graph_node_map[i].host_name);
+		RoutingTable[i].nextHop = graph_node_map[i].isNeighbour ? strdup(graph_node_map[i].host_name) : NULL;
 		RoutingTable[i].cost = graph[0][i];
 		RoutingTable[i].ttl = TTL;
 	}
@@ -143,7 +143,7 @@ void initialize(string configFile, int portNumber, int TTL, int infinity, int pe
 void freeMemory(){
 	for(int i = 0; i < number_of_nodes; i++){
 		free(graph[i]);
-		free(graph_node_map[i].ip_address);
+		free(graph_node_map[i].host_name);
 		free(RoutingTable[i].destination);
 		if(RoutingTable[i].nextHop) free(RoutingTable[i].nextHop);
 	}
