@@ -260,11 +260,13 @@ void sendAdvertisement(int socket_id, int portNumber){
 				error_handler("Invalid address. This address is not supported.", true);
 		  }
 
+			//cout<<"Sending to destination: "<<graph_node_map[i].host_name<<endl;
 			if(sendto(socket_id, message, buffsize, 0, (struct sockaddr*)&server_address, addrlen) <= 0){
 				perror("Error:");
 				freeSocket(socket_id);
 				error_handler("Sending Failed", true);
 			}
+			
 		}
 	}
 
