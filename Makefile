@@ -1,2 +1,2 @@
 all:
-	g++ DistanceVectorRouting.cpp -o DistanceVectorRouting -std=c++11
+	g++ DistanceVectorRouting.cpp -o DistanceVectorRouting -std=c++11 -lpthread

@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstdlib>
 #include <unistd.h>
+#include <pthread.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -43,6 +44,13 @@ typedef struct{
 	int cost;
 } route_message;
 
+typedef struct{
+	int socket_id;
+	int period;
+	int TTL;
+	int infinity;
+} update_parameter;
+
 void freeMemory();
 void freeSocket(int socket_id);
 void error_handler(string message, bool callFreeMemory);
@@ -58,6 +66,8 @@ void initialize(string configFile, int portNumber, int TTL, int infinity, int pe
 int createSocket(int portNumber);
 void sendAdvertisement(int socket_id, int portNumber);
 int calculate_buffer_size();
+void* updateHandler(void* parameter);
+void initializeThreads(int socket_id, int period, int TTL, int infinity);
 
 void error_handler(string message, bool callFreeMemory){
 	cerr<<message<<endl;
@@ -130,6 +140,7 @@ void printGraph(){
 }
 
 void printRoutingTable(){
+	cout<<"Printing Routing Table"<<endl;
 	for(int i = 0; i < number_of_nodes; i++){
 		cout<<RoutingTable[i].destination<<"\t";
 		RoutingTable[i].nextHop ? cout<<RoutingTable[i].nextHop : cout<<"NULL";
@@ -212,6 +223,21 @@ void initialize(string configFile, int portNumber, int TTL, int infinity, int pe
 	initializeRoutingTable(TTL);
 }
 
+void initializeThreads(int socket_id, int period, int TTL, int infinity){
+	pthread_mutex_t routing_mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_t update_thread;
+	update_parameter input;
+	input.socket_id = socket_id;
+	input.period = period;
+	input.TTL = TTL;
+	input.infinity = infinity;
+	int thread_id;
+	if(thread_id = pthread_create(&update_thread, NULL, updateHandler, (void*)&input)){
+			freeSocket(socket_id);
+			error_handler("Update Thread Creation Failed.", true);
+	}
+}
+
 int createSocket(int portNumber){
 	int socket_id;
 	if((socket_id = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0){
@@ -266,11 +292,39 @@ void sendAdvertisement(int socket_id, int portNumber){
 				freeSocket(socket_id);
 				error_handler("Sending Failed", true);
 			}
-			
+
 		}
 	}
 
 
+}
+
+void* updateHandler(void* parameter){
+	update_parameter* input = (update_parameter*)parameter;
+	while(1){
+		sleep(input->period);
+		bool flag = false;
+		for(int i = 1; i < number_of_nodes; i++){
+			RoutingTable[i].ttl -= input->period;
+			if(RoutingTable[i].ttl <= 0){
+				flag = true;
+				if(RoutingTable[i].nextHop) free(RoutingTable[i].nextHop);
+				RoutingTable[i].nextHop = NULL;
+				RoutingTable[i].cost = input->infinity;
+				RoutingTable[i].ttl = input->TTL;
+				graph[0][i] = input->infinity;
+				graph_node_map[i].isNeighbour = false;
+			}
+		}
+		//Call this once recieved message is implemented
+		/*
+		if(flag){
+				cout<<"Printing Updated "<<endl;
+		}
+		*/
+		printRoutingTable();
+
+	}
 }
 
 void freeMemory(){
@@ -306,6 +360,10 @@ int main(int argc, char const* argv[]){
 	initialize(configFile, portNumber, TTL, infinity, period, poisonReverse);
 	int socket_id = createSocket(portNumber);
 	sendAdvertisement(socket_id, portNumber);
+	initializeThreads(socket_id, period, TTL, infinity);
+
+	while(1);
+
 
 	freeMemory();
 	freeSocket(socket_id);
