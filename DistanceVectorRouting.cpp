@@ -79,6 +79,40 @@ int calculate_buffer_size(){
 	return (number_of_nodes * sizeof(route_message));
 }
 
+
+void bellmanFord(int infinity){
+  int distance[number_of_nodes];
+  string previous[number_of_nodes];
+  for(int i =0; i< number_of_nodes; i++){
+    distance[i] = infinity;
+    previous[i] = "";
+  }
+
+  distance[0] = 0;
+
+  for(int vertex =0; vertex< number_of_nodes; vertex++){
+    for(int i =0; i< number_of_nodes; i++){
+      for(int j =0; j< number_of_nodes; j++){
+        if(graph[i][j] == 1){
+          if (distance[j] > distance[i]+graph[i][j]){
+            distance[j] = distance[i]+graph[i][j];
+            previous[j] = graph_node_map[i].host_name;
+          }
+        }
+      }
+    }
+
+  }
+  //print distance -
+  for(int i =0; i< number_of_nodes; i++)
+    cout<<distance[i]<<"\t";
+  cout<<endl;
+  for(int i =0; i< number_of_nodes; i++)
+    cout<<previous[i]<<"\t";
+  cout<<endl;
+}
+
+
 void printGraph(){
 	cout<<"Printing Graph"<<endl;
 	for(int i = 0; i < number_of_nodes; i++){
