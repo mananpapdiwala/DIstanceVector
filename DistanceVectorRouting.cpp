@@ -49,6 +49,7 @@ typedef struct{
 	int period;
 	int TTL;
 	int infinity;
+	pthread_mutex_t* routing_mutex;
 } update_parameter;
 
 void freeMemory();
@@ -231,6 +232,7 @@ void initializeThreads(int socket_id, int period, int TTL, int infinity){
 	input.period = period;
 	input.TTL = TTL;
 	input.infinity = infinity;
+	input.routing_mutex = &routing_mutex;
 	int thread_id;
 	if(thread_id = pthread_create(&update_thread, NULL, updateHandler, (void*)&input)){
 			freeSocket(socket_id);
@@ -305,6 +307,7 @@ void* updateHandler(void* parameter){
 		sleep(input->period);
 		bool flag = false;
 		for(int i = 1; i < number_of_nodes; i++){
+			pthread_mutex_lock(input->routing_mutex);
 			RoutingTable[i].ttl -= input->period;
 			if(RoutingTable[i].ttl <= 0){
 				flag = true;
@@ -315,6 +318,7 @@ void* updateHandler(void* parameter){
 				graph[0][i] = input->infinity;
 				graph_node_map[i].isNeighbour = false;
 			}
+			pthread_mutex_unlock(input->routing_mutex);
 		}
 		//Call this once recieved message is implemented
 		/*
