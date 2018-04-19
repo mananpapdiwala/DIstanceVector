@@ -52,6 +52,12 @@ typedef struct{
 	pthread_mutex_t* routing_mutex;
 } update_parameter;
 
+typedef struct{
+	int socket_id;
+	pthread_mutex_t* receive_mutex;
+} receive_parameter;
+
+
 void freeMemory();
 void freeSocket(int socket_id);
 void error_handler(string message, bool callFreeMemory);
@@ -62,13 +68,16 @@ void set_graphNode(node& graph_node, string host_name, bool isNeighbour);
 void read_config_file(string file_name, vector<string>& config_lines);
 void create_2D_array(int** array, int row, int col);
 void initializeGraph(vector<string>& config_lines, int infinity);
+int getNodeIndex(char* ip);
 void initializeRoutingTable(int TTL);
 void initialize(string configFile, int portNumber, int TTL, int infinity, int period, int poisonReverse);
 int createSocket(int portNumber);
 void sendAdvertisement(int socket_id, int portNumber);
 int calculate_buffer_size();
 void* updateHandler(void* parameter);
+void* receiveHandler(void* parameter);
 void initializeThreads(int socket_id, int period, int TTL, int infinity);
+
 
 void error_handler(string message, bool callFreeMemory){
 	cerr<<message<<endl;
@@ -90,6 +99,14 @@ int calculate_buffer_size(){
 	return (number_of_nodes * sizeof(route_message));
 }
 
+int getNodeIndex(char* ip){
+	for(int i=0; i<number_of_nodes; i++){
+		if(strcmp(graph_node_map[i].host_name, ip)==0){
+			return i;
+		}
+	}
+	return -1;
+}
 
 void bellmanFord(int infinity){
   int distance[number_of_nodes];
@@ -227,6 +244,7 @@ void initialize(string configFile, int portNumber, int TTL, int infinity, int pe
 void initializeThreads(int socket_id, int period, int TTL, int infinity){
 	pthread_mutex_t routing_mutex = PTHREAD_MUTEX_INITIALIZER;
 	pthread_t update_thread;
+	pthread_t receive_thread;
 	update_parameter input;
 	input.socket_id = socket_id;
 	input.period = period;
@@ -238,6 +256,17 @@ void initializeThreads(int socket_id, int period, int TTL, int infinity){
 			freeSocket(socket_id);
 			error_handler("Update Thread Creation Failed.", true);
 	}
+
+	//Preparing receive thread -
+	receive_parameter receive_input;
+	receive_input.socket_id = socket_id;
+	receive_input.receive_mutex = &routing_mutex;
+	int recv_thread_id;
+	if(recv_thread_id = pthread_create(&receive_thread, NULL, receiveHandler, (void*)&receive_input)){
+			freeSocket(socket_id);
+			error_handler("Receive Thread Creation Failed.", true);
+	}
+
 }
 
 int createSocket(int portNumber){
@@ -330,6 +359,42 @@ void* updateHandler(void* parameter){
 
 	}
 }
+
+
+void* receiveHandler(void* parameter){
+	receive_parameter* input = (receive_parameter*)parameter;
+	int socket_id = input->socket_id;
+	route_message buffer[number_of_nodes];
+	int recvlen;
+	int buffsize = calculate_buffer_size();
+	while(1){
+		struct sockaddr_in remaddr;
+		socklen_t raddrlen = sizeof(remaddr);
+		recvlen = recvfrom(socket_id, buffer, buffsize, 0, (struct sockaddr*)&remaddr, &raddrlen);
+		char* source_ip = strdup(inet_ntoa(remaddr.sin_addr));
+		int source_index = getNodeIndex(source_ip);
+		if (source_index == -1){
+			freeSocket(socket_id);
+			error_handler("Source IP index not found", true);
+		}
+		for(int i=0; i<number_of_nodes; i++){
+			int dest_index = getNodeIndex(buffer[i].destination);
+			if (dest_index == -1){
+				freeSocket(socket_id);
+				error_handler("Destination IP index not found", true);
+			}
+			graph[source_index][dest_index] = buffer[i].cost;
+
+		}
+
+
+
+		free(source_ip);
+
+	}
+}
+
+
 
 void freeMemory(){
 	for(int i = 0; i < number_of_nodes; i++){
