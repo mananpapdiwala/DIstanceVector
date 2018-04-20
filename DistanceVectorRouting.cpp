@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 #define DEFAULT_PARAMS 7
 #define HOST_NAME_MAX 50
@@ -57,6 +58,7 @@ void freeMemory();
 void freeSocket(int socket_id);
 void error_handler(string message, bool callFreeMemory);
 string getLocalHostName();
+string getIPAddress(char *hostname);
 void printGraph();
 void printRoutingTable();
 void set_graphNode(node& graph_node, string host_name, bool isNeighbour);
@@ -89,6 +91,20 @@ string getLocalHostName(){
 		error_handler("Failed to get hostname", false);
 	}
 	return string(hostname);
+}
+
+string getIPAddress(string hostname) {
+	struct addrinfo pointers, *host;
+	int returnval;
+	memset(&pointers, 0, sizeof pointers);
+	pointers.ai_family = AF_UNSPEC;
+	pointers.ai_socktype = SOCK_DGRAM;
+	if ((returnval = getaddrinfo(hostname.c_str(), NULL, &pointers, &host)) != 0) {
+		error_handler("Failed to resolve ip address for host", true);
+	}
+
+	struct sockaddr_in *addr = (struct sockaddr_in *) host->ai_addr;
+	return string(inet_ntoa((struct in_addr) addr->sin_addr));
 }
 
 int calculate_buffer_size(){
@@ -154,7 +170,7 @@ bool bellmanFord(int source_index, int infinity, int TTL, pthread_mutex_t* routi
 			RoutingTable[i].ttl = TTL;
 		}
 	}
-	pthread_mutex_lock(routing_mutex);
+	pthread_mutex_unlock(routing_mutex);
 	return changed;
 }
 
@@ -216,11 +232,13 @@ void create_2D_array(int** array, int row, int col){
 }
 
 void initializeGraph(vector<string>& config_lines, int infinity){
-	string hostname = getLocalHostName();
 	create_2D_array(graph, config_lines.size()+1, config_lines.size()+1);
 	graph_node_map = (node*)calloc(config_lines.size()+1, sizeof(node));
+
+	string hostname = getLocalHostName();
+	string local_ip = getIPAddress(hostname);
 	//Initialize itself to 0
-	set_graphNode(graph_node_map[0], hostname, true);
+	set_graphNode(graph_node_map[0], local_ip, true);
 	graph[0][0] = 0;
 	//Parse config file data and initialize graph
 
@@ -229,7 +247,8 @@ void initializeGraph(vector<string>& config_lines, int infinity){
 		int pos = config_lines[i-1].find(delim);
 		string name  = config_lines[i-1].substr(0, pos);
 		int neighbour = stoi(config_lines[i-1].substr(pos+1));
-		set_graphNode(graph_node_map[i], name, neighbour ? true : false);
+		string ip = getIPAddress(name);
+		set_graphNode(graph_node_map[i], ip, neighbour ? true : false);
 		graph[0][i] = neighbour ? 1 : infinity;
 		for(int j = 0; j < number_of_nodes; j++){
 			graph[i][j] = infinity;
@@ -337,7 +356,7 @@ void sendAdvertisement(int socket_id, int portNumber, pthread_mutex_t* routing_m
 		  server_address.sin_family = AF_INET;
 		  server_address.sin_port = htons(portNumber);
 
-		  if(inet_pton(AF_INET, graph_node_map[i].host_name, &server_address.sin_addr) < 0){
+		  if(inet_aton(graph_node_map[i].host_name, &server_address.sin_addr) < 0){
 				freeSocket(socket_id);
 				error_handler("Invalid address. This address is not supported.", true);
 		  }
@@ -396,11 +415,14 @@ void* receiveHandler(void* parameter){
 	route_message buffer[number_of_nodes];
 	int recvlen;
 	int buffsize = calculate_buffer_size();
+	cout<<"Receive thread started handler-------->"<<endl;
 	while(1){
 		struct sockaddr_in remaddr;
 		socklen_t raddrlen = sizeof(remaddr);
 		recvlen = recvfrom(socket_id, buffer, buffsize, 0, (struct sockaddr*)&remaddr, &raddrlen);
 		char* source_ip = strdup(inet_ntoa(remaddr.sin_addr));
+		cout<<"Received Message from---------------->"<<source_ip<<endl;
+
 		int source_index = getNodeIndex(source_ip);
 		if (source_index == -1){
 			freeSocket(socket_id);
@@ -415,7 +437,9 @@ void* receiveHandler(void* parameter){
 			graph[source_index][dest_index] = buffer[i].cost;
 		}
 
+		cout<<"Starting bellmanFord------->"<<endl;
 		if(bellmanFord(source_index, input->infinity, input->TTL, input->routing_mutex)){
+				cout<<"Started Send Advertisement------------->"<<endl;
 				sendAdvertisement(socket_id, input->portNumber, input->routing_mutex);
 		}
 
