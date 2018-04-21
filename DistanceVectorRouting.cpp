@@ -121,45 +121,19 @@ int getNodeIndex(char* ip){
 }
 
 bool bellmanFord(int source_index, int infinity, int TTL, pthread_mutex_t* routing_mutex){
-	/*
-	int distance[number_of_nodes];
-  string previous[number_of_nodes];
-  for(int i =0; i< number_of_nodes; i++){
-    distance[i] = infinity;
-    previous[i] = "";
-  }
-	*/
-  //distance[0] = 0;
-
-	/*
-  for(int vertex =0; vertex< number_of_nodes; vertex++){
-    for(int i =0; i< number_of_nodes; i++){
-      for(int j =0; j< number_of_nodes; j++){
-        if(graph[i][j] == 1){
-          if (distance[j] > distance[i]+graph[i][j]){
-            distance[j] = distance[i]+graph[i][j];
-            previous[j] = graph_node_map[i].host_name;
-          }
-        }
-      }
-    }
-
-  }
-	*/
-  //print distance
-	/* -
-  for(int i =0; i< number_of_nodes; i++)
-    cout<<distance[i]<<"\t";
-  cout<<endl;
-  for(int i =0; i< number_of_nodes; i++)
-    cout<<previous[i]<<"\t";
-  cout<<endl;
-	*/
-
-
 	bool changed = false;
-	int curSourceDistance = graph[0][source_index];
+
 	pthread_mutex_lock(routing_mutex);
+	if(graph[0][source_index] == infinity){
+		graph[0][source_index] = 1;
+		RoutingTable[source_index].nextHop = strdup(graph_node_map[source_index].host_name);
+		RoutingTable[source_index].cost = graph[0][source_index];
+		changed = true;
+	}
+
+	RoutingTable[source_index].ttl = TTL;
+
+	int curSourceDistance = graph[0][source_index];
 	for(int i = 0; i < number_of_nodes; i++){
 		if(curSourceDistance + graph[source_index][i] < graph[0][i]){
 			changed = true;
@@ -415,13 +389,12 @@ void* receiveHandler(void* parameter){
 	route_message buffer[number_of_nodes];
 	int recvlen;
 	int buffsize = calculate_buffer_size();
-	cout<<"Receive thread started handler-------->"<<endl;
+
 	while(1){
 		struct sockaddr_in remaddr;
 		socklen_t raddrlen = sizeof(remaddr);
 		recvlen = recvfrom(socket_id, buffer, buffsize, 0, (struct sockaddr*)&remaddr, &raddrlen);
 		char* source_ip = strdup(inet_ntoa(remaddr.sin_addr));
-		cout<<"Received Message from---------------->"<<source_ip<<endl;
 
 		int source_index = getNodeIndex(source_ip);
 		if (source_index == -1){
@@ -437,9 +410,8 @@ void* receiveHandler(void* parameter){
 			graph[source_index][dest_index] = buffer[i].cost;
 		}
 
-		cout<<"Starting bellmanFord------->"<<endl;
 		if(bellmanFord(source_index, input->infinity, input->TTL, input->routing_mutex)){
-				cout<<"Started Send Advertisement------------->"<<endl;
+				printRoutingTable();
 				sendAdvertisement(socket_id, input->portNumber, input->routing_mutex);
 		}
 
