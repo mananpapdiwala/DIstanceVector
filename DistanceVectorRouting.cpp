@@ -131,7 +131,7 @@ bool bellmanFord(int source_index, int infinity, int TTL, pthread_mutex_t* routi
 		changed = true;
 	}
 
-	RoutingTable[source_index].ttl = TTL;
+	//RoutingTable[source_index].ttl = TTL;
 
 	int curSourceDistance = graph[0][source_index];
 	for(int i = 0; i < number_of_nodes; i++){
@@ -141,6 +141,9 @@ bool bellmanFord(int source_index, int infinity, int TTL, pthread_mutex_t* routi
 			if(RoutingTable[i].nextHop) free(RoutingTable[i].nextHop);
 			RoutingTable[i].nextHop = strdup(graph_node_map[source_index].host_name);
 			RoutingTable[i].cost = graph[0][i];
+			RoutingTable[i].ttl = TTL;
+		}
+		else if(curSourceDistance + graph[source_index][i] == graph[0][i] && strcmp(graph_node_map[source_index].host_name, RoutingTable[i].nextHop) == 0){
 			RoutingTable[i].ttl = TTL;
 		}
 	}
