@@ -1,3 +1,0 @@
-lab009h23.soic.indiana.edu 1
-lab009h24.soic.indiana.edu 1
-lab009h25.soic.indiana.edu 0
