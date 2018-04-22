@@ -50,6 +50,7 @@ typedef struct{
 	int period;
 	int TTL;
 	int infinity;
+	int poisonReverse;
 	int portNumber;
 	pthread_mutex_t* routing_mutex;
 } thread_parameter;
@@ -69,11 +70,12 @@ int getNodeIndex(char* ip);
 void initializeRoutingTable(int TTL);
 void initialize(string configFile, int portNumber, int TTL, int infinity, int period, int poisonReverse);
 int createSocket(int portNumber);
-void sendAdvertisement(int socket_id, int portNumber, pthread_mutex_t* routing_mutex);
+void createPacket(char* destination, route_message* buffer, int infinity, int poisonReverse);
+void sendAdvertisement(int socket_id, int portNumber, pthread_mutex_t* routing_mutex, int infinity, int poisonReverse);
 int calculate_buffer_size();
 void* updateHandler(void* parameter);
 void* receiveHandler(void* parameter);
-void initializeThreads(int socket_id, int period, int TTL, int infinity, int portNumber);
+void initializeThreads(int socket_id, int period, int TTL, int infinity, int poisonReverse, int portNumber);
 bool bellmanFord(int source_index, int infinity, int TTL, pthread_mutex_t* routing_mutex);
 
 
@@ -255,7 +257,7 @@ void initialize(string configFile, int portNumber, int TTL, int infinity, int pe
 	initializeRoutingTable(TTL);
 }
 
-void initializeThreads(int socket_id, int period, int TTL, int infinity, int portNumber){
+void initializeThreads(int socket_id, int period, int TTL, int infinity, int poisonReverse, int portNumber){
 	pthread_mutex_t routing_mutex = PTHREAD_MUTEX_INITIALIZER;
 	pthread_t update_thread;
 	pthread_t receive_thread;
@@ -264,6 +266,7 @@ void initializeThreads(int socket_id, int period, int TTL, int infinity, int por
 	input.period = period;
 	input.TTL = TTL;
 	input.infinity = infinity;
+	input.poisonReverse = poisonReverse;
 	input.portNumber = portNumber;
 	input.routing_mutex = &routing_mutex;
 	int thread_id;
@@ -279,6 +282,7 @@ void initializeThreads(int socket_id, int period, int TTL, int infinity, int por
 	receive_input.TTL = TTL;
 	receive_input.infinity = infinity;
 	receive_input.period = period;
+	receive_input.poisonReverse = poisonReverse;
 	receive_input.routing_mutex = &routing_mutex;
 	int recv_thread_id;
 	if(recv_thread_id = pthread_create(&receive_thread, NULL, receiveHandler, (void*)&receive_input)){
@@ -314,13 +318,27 @@ int createSocket(int portNumber){
 	return socket_id;
 }
 
-void sendAdvertisement(int socket_id, int portNumber, pthread_mutex_t* routing_mutex){
+void createPacket(char* destination, route_message* buffer, int infinity, int poisonReverse){
+	for(int i = 0; i < number_of_nodes; i++){
+		strncpy(buffer[i].destination, RoutingTable[i].destination, HOST_NAME_MAX);
+		if(poisonReverse && RoutingTable[i].nextHop && strcmp(destination, RoutingTable[i].nextHop) == 0){
+			buffer[i].cost = infinity;
+		}
+		else{
+			buffer[i].cost = RoutingTable[i].cost;
+		}
+	}
+}
+
+void sendAdvertisement(int socket_id, int portNumber, pthread_mutex_t* routing_mutex, int infinity, int poisonReverse){
 	route_message message[number_of_nodes];
 	pthread_mutex_lock(routing_mutex);
+	/*
 	for(int i = 0; i < number_of_nodes; i++){
 		strncpy(message[i].destination, RoutingTable[i].destination, HOST_NAME_MAX);
 		message[i].cost = RoutingTable[i].cost;
 	}
+	*/
 	pthread_mutex_unlock(routing_mutex);
 
 	int buffsize = calculate_buffer_size();
@@ -339,11 +357,16 @@ void sendAdvertisement(int socket_id, int portNumber, pthread_mutex_t* routing_m
 		  }
 
 			//cout<<"Sending to destination: "<<graph_node_map[i].host_name<<endl;
+
+			createPacket(graph_node_map[i].host_name, message, infinity, poisonReverse);
+
 			if(sendto(socket_id, message, buffsize, 0, (struct sockaddr*)&server_address, addrlen) <= 0){
 				perror("Error:");
 				freeSocket(socket_id);
 				error_handler("Sending Failed", true);
 			}
+
+			bzero(message, buffsize);
 
 		}
 	}
@@ -354,6 +377,7 @@ void sendAdvertisement(int socket_id, int portNumber, pthread_mutex_t* routing_m
 void* updateHandler(void* parameter){
 	thread_parameter* input = (thread_parameter*)parameter;
 	while(1){
+		sendAdvertisement(input->socket_id, input->portNumber, input->routing_mutex, input->infinity, input->poisonReverse);
 		sleep(input->period);
 		bool flag = false;
 		pthread_mutex_lock(input->routing_mutex);
@@ -373,7 +397,6 @@ void* updateHandler(void* parameter){
 
 		}
 		pthread_mutex_unlock(input->routing_mutex);
-		sendAdvertisement(input->socket_id, input->portNumber, input->routing_mutex);
 		//Call this once recieved message is implemented
 		/*
 		if(flag){
@@ -415,7 +438,7 @@ void* receiveHandler(void* parameter){
 
 		if(bellmanFord(source_index, input->infinity, input->TTL, input->routing_mutex)){
 				printRoutingTable();
-				sendAdvertisement(socket_id, input->portNumber, input->routing_mutex);
+				sendAdvertisement(socket_id, input->portNumber, input->routing_mutex, input->infinity, input->poisonReverse);
 		}
 
 
@@ -459,7 +482,7 @@ int main(int argc, char const* argv[]){
 	initialize(configFile, portNumber, TTL, infinity, period, poisonReverse);
 	int socket_id = createSocket(portNumber);
 	//sendAdvertisement(socket_id, portNumber);
-	initializeThreads(socket_id, period, TTL, infinity, portNumber);
+	initializeThreads(socket_id, period, TTL, infinity, poisonReverse, portNumber);
 
 	while(1);
 
