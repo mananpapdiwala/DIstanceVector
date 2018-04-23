@@ -133,8 +133,6 @@ bool bellmanFord(int source_index, int infinity, int TTL, pthread_mutex_t* routi
 		changed = true;
 	}
 
-	//RoutingTable[source_index].ttl = TTL;
-
 	int curSourceDistance = graph[0][source_index];
 	for(int i = 0; i < number_of_nodes; i++){
 		if(curSourceDistance + graph[source_index][i] < graph[0][i]){
@@ -194,7 +192,6 @@ void read_config_file(string file_name, vector<string>& config_lines){
     while ( getline (myfile,line) )
     {
 			config_lines.push_back(line);
-      //cout << line << '\n';
     }
     myfile.close();
   }
@@ -332,14 +329,9 @@ void createPacket(char* destination, route_message* buffer, int infinity, int po
 
 void sendAdvertisement(int socket_id, int portNumber, pthread_mutex_t* routing_mutex, int infinity, int poisonReverse){
 	route_message message[number_of_nodes];
-	pthread_mutex_lock(routing_mutex);
-	/*
-	for(int i = 0; i < number_of_nodes; i++){
-		strncpy(message[i].destination, RoutingTable[i].destination, HOST_NAME_MAX);
-		message[i].cost = RoutingTable[i].cost;
-	}
-	*/
-	pthread_mutex_unlock(routing_mutex);
+
+
+
 
 	int buffsize = calculate_buffer_size();
 	for(int i = 1; i < number_of_nodes; i++){
@@ -356,9 +348,9 @@ void sendAdvertisement(int socket_id, int portNumber, pthread_mutex_t* routing_m
 				error_handler("Invalid address. This address is not supported.", true);
 		  }
 
-			//cout<<"Sending to destination: "<<graph_node_map[i].host_name<<endl;
-
+			pthread_mutex_lock(routing_mutex);
 			createPacket(graph_node_map[i].host_name, message, infinity, poisonReverse);
+			pthread_mutex_unlock(routing_mutex);
 
 			if(sendto(socket_id, message, buffsize, 0, (struct sockaddr*)&server_address, addrlen) <= 0){
 				perror("Error:");
@@ -389,20 +381,12 @@ void* updateHandler(void* parameter){
 					if(RoutingTable[i].nextHop) free(RoutingTable[i].nextHop);
 					RoutingTable[i].nextHop = NULL;
 					RoutingTable[i].cost = input->infinity;
-					//RoutingTable[i].ttl = input->TTL;
 					graph[0][i] = input->infinity;
-					//graph_node_map[i].isNeighbour = false;
 				}
 			}
 
 		}
 		pthread_mutex_unlock(input->routing_mutex);
-		//Call this once recieved message is implemented
-		/*
-		if(flag){
-				cout<<"Printing Updated "<<endl;
-		}
-		*/
 		printRoutingTable();
 
 	}
@@ -481,7 +465,6 @@ int main(int argc, char const* argv[]){
 	int poisonReverse = atoi(argv[6]);
 	initialize(configFile, portNumber, TTL, infinity, period, poisonReverse);
 	int socket_id = createSocket(portNumber);
-	//sendAdvertisement(socket_id, portNumber);
 	initializeThreads(socket_id, period, TTL, infinity, poisonReverse, portNumber);
 
 	while(1);
